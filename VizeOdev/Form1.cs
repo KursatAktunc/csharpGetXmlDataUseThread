@@ -1,13 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Xml;
 using System.IO;
-using System.Threading.Tasks;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace VizeOdev
@@ -17,53 +12,49 @@ namespace VizeOdev
         public Form1()
         {
             InitializeComponent();
-          
         }
-        public static void dosyadanOku()
+
+        static Thread thread1;
+
+        string[] lines =
         {
-            string dosya_yolu = @"abc.txt";
-           
-            FileStream fs = new FileStream(dosya_yolu, FileMode.Open, FileAccess.Read);
-           
-            StreamReader sw = new StreamReader(fs);
-            
-            string yazi = sw.ReadLine();
-            while (yazi != null)
+            "P_NAME", "P_MFGR", "P_BRAND","P_TYPE","P_SIZE","P_CONTAINER","P_RETAILPRICE","P_COMMENT"
+        };
+        string[] dataNetwork = new string[8];
+        string[] dataText = new string[8];
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            thread1 = new Thread(() =>
             {
-                Console.WriteLine(yazi);
-                yazi = sw.ReadLine();
-            }
-            
-            sw.Close();
-            fs.Close();
-          
+                while (true)
+                {
+                    fetchXmlData();
+                    dosyadanOku();
+                    compareAndWriteData();
+                    Thread.Sleep(100); //15dk da bir verileri kontrol eder
+                }
+            });
+            thread1.Start();
         }
-        void writeText(string P_NAME, string P_MFGR, string P_BRAND,string P_TYPE,string P_SIZE,string P_CONTAINER,string P_RETAILPRICE,string P_COMMENT)
+
+        void dosyadanOku()
         {
-            using (StreamWriter file = new StreamWriter("WriteLines2.txt", append: true))
+            if (File.Exists(@"WriteLines.txt"))
             {
-               
-                file.WriteLine("P_NAME "+P_NAME);
-                file.WriteLine("P_MFGR "+P_MFGR);
-                file.WriteLine("P_BRAND "+P_BRAND);
-                file.WriteLine("P_TYPE "+P_TYPE);
-                file.WriteLine("P_SIZE "+P_SIZE);
-                file.WriteLine("P_CONTAINER "+P_CONTAINER);
-                file.WriteLine("P_RETAILPRICE "+P_RETAILPRICE);
-                file.WriteLine("P_COMMENT"+P_COMMENT);
-              
+                string[] textLine = File.ReadAllLines(@"WriteLines.txt");
+                int counter = 0;
+
+                foreach (string line in textLine)
+                {
+                    dataText[counter] = line;
+                    counter++;
+                }
             }
-            string dosyaAdi = @"abc.txt";
-            string yazis = "deneme123";
-            FileStream fss = new FileStream(dosyaAdi, FileMode.OpenOrCreate, FileAccess.Write);
-            fss.Close();
-            File.AppendAllText(dosyaAdi, Environment.NewLine+ yazis);
         }
 
-        void fetchxmldata()
-
+        void fetchXmlData()
         {
-
             try
             {
                 string BASE_URL = "http://aiweb.cs.washington.edu/research/projects/xmltk/xmldata/data/tpc-h/part.xml";
@@ -71,16 +62,10 @@ namespace VizeOdev
                 var xmlDoc = new XmlDocument();
                 xmlDoc.Load(BASE_URL);
 
-                string P_NAME = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_NAME").InnerXml;
-                string P_MFGR = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_MFGR").InnerXml;
-                string P_BRAND = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_BRAND").InnerXml;
-                string P_TYPE = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_TYPE").InnerXml;
-                string P_SIZE = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_SIZE").InnerXml;
-                string P_CONTAINER = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_CONTAINER").InnerXml;
-                string P_RETAILPRICE = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_RETAILPRICE").InnerXml;
-                string P_COMMENT = xmlDoc.SelectSingleNode("table[@ID='part']/T/P_COMMENT").InnerXml;
-                writeText(P_NAME, P_MFGR,P_BRAND,P_TYPE,P_SIZE,P_CONTAINER,P_RETAILPRICE,P_COMMENT);
-                MessageBox.Show(P_NAME+"\n"+P_MFGR+"\n", "baslık", MessageBoxButtons.OK, MessageBoxIcon.Hand);
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    dataNetwork[i] = xmlDoc.SelectSingleNode("table[@ID='part']/T/" + lines[i]).InnerXml;
+                }
             }
             catch (Exception ex)
             {
@@ -89,13 +74,30 @@ namespace VizeOdev
             }
         }
 
-
-        private void Form1_Load(object sender, EventArgs e)
+        void compareAndWriteData()
         {
-           
-            fetchxmldata();
-         
-           
+            bool areEqual = dataNetwork.SequenceEqual(dataText);
+            if (!areEqual)
+            {
+                MessageBox.Show("Eşleşmedi Yeni Kayıt Yapılıyor", "deneme", MessageBoxButtons.OK);
+                File.WriteAllLines("WriteLines.txt", dataNetwork);
+
+                listBox1.BeginInvoke(new Action(() =>
+                {
+                    listBox1.Items.Clear();
+                    foreach (var item in dataNetwork)
+                    {
+                        listBox1.Items.Add(item);
+                    }
+                }));
+            }
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            thread1.Abort();
+            Environment.Exit(1);
+            Application.Exit();
         }
     }
 }
